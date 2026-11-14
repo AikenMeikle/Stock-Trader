@@ -25,9 +25,10 @@ def tiny_result(strategy, baseline, trades=(), log_ratio=None):
     trades = pd.DataFrame(list(trades), columns=["date", "bought"]).set_index("date")
     return BacktestResult(
         dates=dates, strategy_values=np.array(strategy, float), baseline_values=np.array(baseline, float),
-        t_stats=np.zeros(n), prices=pd.DataFrame({"SPY": 1.0, "GLD": 1.0, "GBPUSD": 1.0}, index=dates),
-        log_ratio=log_ratio, trades=trades, t_threshold=8.0, trade_count=len(trades),
-        window_bars=30, t_quantile=95.0, max_age=7, warmup_bars=250)
+        t_stats=np.zeros(n), vertices=np.full(n, -1.0),
+        prices=pd.DataFrame({"SPY": 1.0, "GLD": 1.0, "GBPUSD": 1.0}, index=dates),
+        log_ratio=log_ratio, trades=trades, t_threshold=8.0, noise_joint_rate=0.0,
+        trade_count=len(trades), window_bars=30, t_quantile=95.0, max_age=7, warmup_bars=250)
 
 
 # ---- statistics -----------------------------------------------------------------
@@ -44,6 +45,59 @@ def test_summarise_known_values():
     assert table.loc["Total return (%)", "Baseline"] == pytest.approx(0.0)
     assert table.loc["Max drawdown (%)", "Strategy"] == 0.0
     assert table.loc["Time invested (%)", "Baseline"] == 100.0
+
+
+# ---- range metrics / IS-OOS -----------------------------------------------------------
+def test_range_metrics_measure_from_the_bar_before_the_window():
+    dates = pd.bdate_range("2020-01-01", periods=4)
+    r = tiny_result([1000, 1100, 1210, 1331], [1000, 990, 980, 970],
+                    trades=[(dates[2], "SPY")])
+    m = ev.range_metrics(r, r.dates[1], r.dates[2])
+    assert (m["start"], m["end"]) == (r.dates[1], r.dates[2])
+    assert m["bars"] == 2                                   # dates[0] -> dates[2]
+    assert m["strategy_return_pct"] == pytest.approx(21.0)  # 1210 / 1000 - 1
+    assert m["baseline_return_pct"] == pytest.approx(-2.0)  # 980 / 1000 - 1
+    assert m["strategy_max_drawdown_pct"] == 0.0
+    assert m["trades"] == 1                                 # executed inside the window
+    assert m["time_invested_pct"] == pytest.approx(50.0)    # bar 1 cash, bar 2 held
+    assert m["beats_baseline"] is True
+
+
+def test_range_metrics_without_trades_reports_no_exposure():
+    r = tiny_result([1000, 1000, 1000], [1000, 1000, 1000])
+    m = ev.range_metrics(r)
+    assert m["trades"] == 0
+    assert m["time_invested_pct"] == 0.0
+    assert m["strategy_return_pct"] == 0.0
+    assert m["beats_baseline"] is False                     # equal is not a win
+
+
+def test_range_metrics_compares_growth_not_the_inherited_level():
+    # The strategy enters the window far ahead, then grows more slowly than the
+    # baseline. Final levels still favour the strategy; window growth does not.
+    r = tiny_result([1000, 3000, 1200], [100, 100, 200])
+    m = ev.range_metrics(r, r.dates[1], r.dates[2])
+    assert m["strategy_final"] > m["baseline_final"]
+    assert m["strategy_return_pct"] == pytest.approx(20.0)      # 1200 / 1000 - 1
+    assert m["baseline_return_pct"] == pytest.approx(100.0)     # 200 / 100 - 1
+    assert m["beats_baseline"] is False
+
+
+def test_range_metrics_rejects_an_empty_window():
+    r = tiny_result([1000, 1000], [1000, 1000])
+    with pytest.raises(ValueError, match="no traded bars"):
+        ev.range_metrics(r, r.dates[0] - pd.Timedelta(days=10), r.dates[0] - pd.Timedelta(days=1))
+
+
+def test_in_and_out_of_sample_split_at_the_given_date():
+    r = tiny_result([1000, 1100, 1210, 1331, 1464], [1000, 1000, 1000, 1000, 1000])
+    split = r.dates[2]
+    ins = ev.in_sample_metrics(r, split_date=split)
+    oos = ev.out_of_sample_metrics(r, split_date=split)
+    assert ins["end"] == split
+    assert oos["start"] == r.dates[3]
+    assert ins["strategy_return_pct"] == pytest.approx(21.0)          # 1210 / 1000 - 1
+    assert oos["strategy_return_pct"] == pytest.approx((1464 / 1210 - 1) * 100)
 
 
 def test_hit_rate_counts_trades_followed_by_the_expected_move():
@@ -115,11 +169,102 @@ def test_noise_trade_counts_one_per_sim_and_reproducible(curvy_result):
     np.testing.assert_array_equal(a, b)
 
 
+# ---- signal diagnostics ---------------------------------------------------------------
+def test_signal_diagnostics_count_each_gate_separately():
+    r = tiny_result([1000] * 4, [1000] * 4)
+    r.t_stats = np.array([10.0, 2.0, 10.0, 10.0])    # bars 0, 2, 3 are significant
+    r.vertices = np.array([-3.0, -3.0, -20.0, 3.0])  # bar 0 is recent, bar 2 too old, bar 3 in future
+    d = ev.signal_diagnostics(r)
+    assert d["bars"] == 4
+    assert d["significant_bars"] == 3
+    assert d["recent_vertex_bars"] == 2              # bars 0 and 1
+    assert d["joint_bars"] == 1                      # only bar 0 passes both
+    assert d["share_significant_with_recent_vertex_pct"] == pytest.approx(100 / 3)
+
+
+def test_signal_diagnostics_survives_no_bars():
+    r = tiny_result([], [])
+    d = ev.signal_diagnostics(r)
+    assert np.isnan(d["joint_rate_pct"])
+
+
 # ---- sensitivity ----------------------------------------------------------------------
 def test_sensitivity_table_has_one_row_per_setting():
     table = ev.sensitivity_table(curvy_data(), windows=(20, 30), quantiles=(95.0,), age_fractions=(0.25,))
     assert len(table) == 2
     assert {"window", "quantile", "max_age", "trades", "strategy_GBP", "baseline_GBP"} <= set(table.columns)
+
+
+def test_sensitivity_table_reports_noise_and_control_columns():
+    table = ev.sensitivity_table(curvy_data(), windows=(30,), quantiles=(95.0,), age_fractions=(0.25,),
+                                 noise_sims=3, control_runs=3)
+    assert {"noise_trades_median", "beats_control_pct"} <= set(table.columns)
+    assert 0 <= table.loc[0, "beats_control_pct"] <= 100
+
+
+def test_default_age_fraction_reproduces_the_default_max_age():
+    assert max(1, round(backtest.WINDOW * backtest.MAX_AGE_FRACTION)) == backtest.MAX_AGE
+
+
+def test_default_age_fractions_put_the_default_first_and_do_not_repeat_it():
+    fractions = ev.default_age_fractions()
+    assert fractions[0] == backtest.MAX_AGE_FRACTION
+    assert len(fractions) == len(set(fractions))
+    assert 0.35 in fractions and 0.5 in fractions and 0.65 in fractions
+
+
+def test_default_sensitivity_cell_is_in_the_grid():
+    table = ev.sensitivity_table(curvy_data(), windows=(backtest.WINDOW,),
+                                 quantiles=(backtest.T_QUANTILE,),
+                                 noise_sims=3, control_runs=3)
+    assert len(table) == len(ev.default_age_fractions())
+    assert table["max_age"].iloc[0] == backtest.MAX_AGE
+    assert table["age_fraction"].iloc[0] == backtest.MAX_AGE_FRACTION
+
+
+def test_sensitivity_table_has_in_and_out_of_sample_columns():
+    table = ev.sensitivity_table(curvy_data(), windows=(30,), quantiles=(95.0,), age_fractions=(0.5,),
+                                 noise_sims=2, control_runs=2)
+    expected = {"IS_return_pct", "IS_baseline_pct", "IS_trades", "IS_beats_baseline",
+                "OOS_return_pct", "OOS_baseline_pct", "OOS_trades", "OOS_beats_baseline",
+                "age_fraction"}
+    assert expected <= set(table.columns)
+    assert table.loc[0, "IS_return_pct"] == table.loc[0, "IS_return_pct"]   # not NaN
+    assert np.isnan(table.loc[0, "OOS_return_pct"])    # synthetic data ends before the split
+
+
+def _grid(values):
+    """A 3x3 grid (quantiles x age fractions) for one window."""
+    quantiles = np.repeat([90.0, 95.0, 99.0], 3)
+    fractions = np.tile([0.35, 0.5, 0.65], 3)
+    return pd.DataFrame({
+        "window": [30] * 9, "quantile": quantiles, "age_fraction": fractions,
+        "IS_return_pct": values, "OOS_return_pct": [0.0] * 9,
+    })
+
+
+def test_neighbour_median_uses_the_3x3_region_and_ignores_other_windows():
+    table = _grid([50, 50, 10, 50, 50, 10, 10, 10, 100])
+    median = ev.is_neighbour_median(table)
+    assert median.iloc[0] == pytest.approx(50)     # corner sees two 50s and two 50s
+    assert median.iloc[4] == pytest.approx(50)     # centre sees all nine; median 50
+    assert median.iloc[8] == pytest.approx(30)     # corner: [50, 10, 10, 100]
+
+    other = _grid([0, 0, 0, 0, 0, 0, 0, 0, 0])
+    other["window"] = 45
+    both = pd.concat([table, other], ignore_index=True)
+    np.testing.assert_allclose(ev.is_neighbour_median(both).iloc[9:].to_numpy(), 0.0)
+
+
+def test_best_in_sample_cell_prefers_a_robust_region_over_an_isolated_spike():
+    # Raw IS maximum is the bottom-right 100, but its neighbourhood median is 30
+    # and the top-left region is consistently 50. Selection must choose the
+    # region, not the spike.
+    table = _grid([50, 50, 10, 50, 50, 10, 10, 10, 100])
+    best = ev.best_in_sample_cell(table)
+    assert best["IS_return_pct"] != 100
+    assert best["IS_neighbour_median"] == pytest.approx(50)
+    assert best["OOS_return_pct"] == 0.0
 
 
 # ---- charts ---------------------------------------------------------------------------

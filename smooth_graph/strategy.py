@@ -27,10 +27,11 @@ class SwapStrategy:
         if not self.pending_swap:
             return
 
+        target = self.pending_swap
         spy_price = float(prices["SPY"])
         gld_price = float(prices["GLD"])
 
-        if self.pending_swap == "SPY":
+        if target == "SPY":
             portfolio.sell(gld_price, "GLD")
             portfolio.buy(spy_price, "SPY")
         else:  # "GLD"
@@ -38,7 +39,11 @@ class SwapStrategy:
             portfolio.buy(gld_price, "GLD")
 
         self.pending_swap = ""
-        self.trade_count += 1
+        # Count a trade only if the buy actually happened. Portfolio.buy is a
+        # silent no-op when the balance cannot cover the commission, so counting
+        # the queue would overstate the trade count after a failed execution.
+        if target in portfolio.holdings:
+            self.trade_count += 1
 
     def _detect_signal(self, gradient: float, gradient_rate: float) -> None:
         if abs(gradient) > self.threshold:

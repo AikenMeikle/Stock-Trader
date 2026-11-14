@@ -105,6 +105,20 @@ def test_ratio_series_is_left_untouched(quiet):
     pd.testing.assert_series_equal(quiet["ratio"], quiet["ratio_before"])
 
 
+def test_result_records_vertices_and_the_luck_only_fire_rate(quiet):
+    r = quiet["result"]
+    assert len(r.vertices) == len(r.dates)
+    assert 0.0 <= r.noise_joint_rate <= 1.0
+    assert r.target_signal_rate is None
+
+
+def test_target_signal_rate_calibrates_the_full_rule():
+    res = backtest.run_backtest(target_signal_rate=0.02, data=curvy_data())
+    assert res.target_signal_rate == 0.02
+    assert 0.0 < res.noise_joint_rate < 0.10
+    assert len(res.trades) == res.trade_count
+
+
 def test_baseline_starts_on_the_first_traded_bar(quiet):
     first_baseline = quiet["result"].baseline_values[0]
     assert abs(first_baseline - backtest.INITIAL_BALANCE) / backtest.INITIAL_BALANCE < 0.005

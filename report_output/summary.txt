@@ -1,44 +1,92 @@
-Window 30 bars | quantile 95.0 | max age 7 | calibrated t-threshold 8.56
+Window 30 bars | quantile 95.0 | max age 15 | calibrated t-threshold 8.56
 Warm-up bars (calibration only): 250
 Traded 2005-12-28 -> 2026-11-13 (5253 bars)
 
                          Strategy  Baseline
-Final value (GBP)          8603.4   11365.8
-Total return (%)            760.3    1036.6
-Annualised return (%)        10.9      12.4
-Max drawdown (%)            -32.4     -35.0
-Return, first half (%)      164.8     148.0
-Return, second half (%)     224.9     359.0
-Trades                        2.0       0.0
-Time invested (%)            89.9     100.0
+Final value (GBP)         14326.2   11365.8
+Total return (%)           1332.6    1036.6
+Annualised return (%)        13.6      12.4
+Max drawdown (%)            -23.0     -35.0
+Return, first half (%)      419.3     148.0
+Return, second half (%)     175.9     359.0
+Trades                       21.0       0.0
+Time invested (%)            99.3     100.0
 
-Hit rate: the ratio moved the expected way over the next 15 bars after 50% of 2 trades
-Shifted-timeline control: strategy beat 56% of 300 runs that spend the same time in cash/SPY/GLD at the wrong times (median 7,858 GBP)
-Noise check: real data made 2 trades; the same rules on shuffled versions of your own daily changes make a median of 2 [1-4] (5th-95th percentile)
+Signal diagnostics (why this many trades?):
+  Bars with |t| >= 8.56: 197 (3.75% of 5253)
+  Bars with a vertex within 15 bars: 1884 (35.87%)
+  Bars passing BOTH gates: 104 (1.980%)
+  Luck alone passes both at 2.510% (~131.9 events over this period)
+  Median vertex when significant: -14.8 bars (the gate asks for <= 15)
+  Share of significant bars that also pass the age gate: 52.8%
+
+In-sample / out-of-sample (pre-registered split 2014-12-31):
+                   Return  Baseline   Max DD  Trades
+  In-sample       +341.7%   +117.2%   -20.4%      10
+  Out-of-sample   +224.4%   +424.1%   -23.0%      11
+  The split is fixed before looking at results; the defaults were chosen structurally, not by IS return ranking.
+
+Hit rate: the ratio moved the expected way over the next 15 bars after 57% of 21 trades
+Shifted-timeline control: strategy beat 77% of 300 runs that spend the same time in cash/SPY/GLD at the wrong times (median 8,417 GBP)
+Noise check: real data made 21 trades; the same rules on shuffled versions of your own daily changes make a median of 25 [17-33] (5th-95th percentile)
 
 Trades (execution date, ticker bought):
            bought
 date             
+2006-02-17    SPY
+2006-07-11    GLD
 2008-02-06    SPY
+2008-05-23    GLD
+2009-03-20    SPY
+2010-01-14    GLD
+2010-09-14    SPY
+2013-07-25    GLD
+2013-09-16    SPY
+2013-12-18    GLD
+2015-02-11    SPY
 2015-03-16    GLD
+2016-05-31    SPY
+2016-11-03    GLD
+2021-06-10    SPY
+2021-07-19    GLD
+2022-10-26    SPY
+2023-03-03    GLD
+2023-11-16    SPY
+2023-12-07    GLD
+2024-05-03    SPY
 
 Sensitivity (judge the pattern, not the best row):
- window  quantile  max_age  trades  strategy_GBP  baseline_GBP  beats_baseline
-     20      90.0        5       3        8731.1       11365.8           False
-     20      90.0       10      65       10654.8       11365.8           False
-     20      95.0        5       1        3572.4       11365.8           False
-     20      95.0       10      29       10082.7       11365.8           False
-     20      99.0        5       1        3560.6       11365.8           False
-     20      99.0       10       6        4234.2       11365.8           False
-     30      90.0        8       5        5736.1       11365.8           False
-     30      90.0       15      43        4401.2       11365.8           False
-     30      95.0        8       2        8195.9       11365.8           False
-     30      95.0       15      21       14326.2       11365.8            True
-     30      99.0        8       0        1000.0       11365.8           False
-     30      99.0       15       5        4245.1       11365.8           False
-     45      90.0       11       2        3268.7       11365.8           False
-     45      90.0       22      21       19073.3       11365.8            True
-     45      95.0       11       1        3677.8       11365.8           False
-     45      95.0       22      10        4215.6       11365.8           False
-     45      99.0       11       0        1000.0       11365.8           False
-     45      99.0       22       2        3228.0       11365.8           False
+ window  quantile  age_fraction  max_age  trades  strategy_GBP  baseline_GBP  beats_baseline  IS_return_pct  IS_baseline_pct  IS_trades  IS_beats_baseline  OOS_return_pct  OOS_baseline_pct  OOS_trades  OOS_beats_baseline  noise_trades_median  beats_control_pct
+     20      90.0          0.50       10      65       10654.8       11365.8           False          184.8            117.2         33               True           274.2             424.1          32               False                 66.0               67.0
+     20      90.0          0.35        7      15       10324.1       11365.8           False          126.0            117.2          7               True           356.8             424.1           8               False                 23.0               64.0
+     20      90.0          0.65       13      93       12498.4       11365.8            True          193.1            117.2         41               True           326.4             424.1          52               False                 97.0               90.0
+     20      95.0          0.50       10      29       10082.7       11365.8           False          228.6            117.2         15               True           206.8             424.1          14               False                 35.0               69.0
+     20      95.0          0.35        7       4        5036.8       11365.8           False           35.3            117.2          2              False           272.2             424.1           2               False                 11.0               24.0
+     20      95.0          0.65       13      40        9073.4       11365.8           False          109.0            117.2         19              False           334.2             424.1          21               False                 53.0               68.0
+     20      99.0          0.50       10       6        4234.2       11365.8           False           12.7            117.2          3              False           275.7             424.1           3               False                  8.0               52.0
+     20      99.0          0.35        7       1        3560.6       11365.8           False            0.0            117.2          0              False           256.1             424.1           1               False                  2.0               61.0
+     20      99.0          0.65       13       8        6056.7       11365.8           False           61.2            117.2          5              False           275.7             424.1           3               False                 11.0               35.0
+     30      90.0          0.50       15      43        4401.2       11365.8           False          -14.0            117.2         16              False           411.8             424.1          27               False                 50.0               12.0
+     30      90.0          0.35       10       9        5118.6       11365.8           False           20.8            117.2          2              False           323.8             424.1           7               False                 17.0               17.0
+     30      90.0          0.65       20      69        4666.8       11365.8           False           25.8            117.2         32              False           271.1             424.1          37               False                 77.0               21.0
+     30      95.0          0.50       15      21       14326.2       11365.8            True          341.7            117.2         10               True           224.4             424.1          11               False                 24.0               80.0
+     30      95.0          0.35       10       5        4030.1       11365.8           False           15.0            117.2          2              False           250.3             424.1           3               False                  7.0               15.0
+     30      95.0          0.65       20      33        8999.3       11365.8           False          165.9            117.2         18               True           238.4             424.1          15               False                 37.0               64.0
+     30      99.0          0.50       15       5        4245.1       11365.8           False           26.2            117.2          1              False           236.3             424.1           4               False                  5.0               48.0
+     30      99.0          0.35       10       2        2280.2       11365.8           False            0.0            117.2          0              False           128.0             424.1           2               False                  1.0               78.0
+     30      99.0          0.65       20       6        9579.2       11365.8           False          184.8            117.2          2               True           236.3             424.1           4               False                  8.0               46.0
+     45      90.0          0.50       22      21       19073.3       11365.8            True          364.5            117.2         12               True           310.6             424.1           9               False                 26.0               93.0
+     45      90.0          0.35       16      10       11691.4       11365.8            True          157.4            117.2          6               True           354.2             424.1           4               False                 10.0               65.0
+     45      90.0          0.65       29      27       15951.8       11365.8            True          276.8            117.2         14               True           323.3             424.1          13               False                 42.0               86.0
+     45      95.0          0.50       22      10        4215.6       11365.8           False           24.7            117.2          4              False           238.2             424.1           6               False                 14.5                8.0
+     45      95.0          0.35       16       2        3189.0       11365.8           False          -13.4            117.2          2              False           268.2             424.1           0               False                  5.0                0.0
+     45      95.0          0.65       29      18        4809.8       11365.8           False           41.5            117.2         10              False           240.0             424.1           8               False                 22.0               11.0
+     45      99.0          0.50       22       2        3228.0       11365.8           False          -12.3            117.2          2              False           268.2             424.1           0               False                  3.0               10.0
+     45      99.0          0.35       16       1        2488.7       11365.8           False          -32.4            117.2          1              False           268.2             424.1           0               False                  1.0                1.0
+     45      99.0          0.65       29       5        3031.5       11365.8           False           -6.9            117.2          4              False           225.7             424.1           1               False                  5.0                5.0
+
+Pre-registered selection check (choose on IS only, then evaluate once on OOS):
+  Neighbour-robust IS pick: window 20, quantile 90, age fraction 0.65 (max age 13)
+    IS +193.1% vs baseline +117.2% (41 trades); 3x3 IS neighbourhood median +188.9%
+    OOS +326.4% vs baseline +424.1% (52 trades) -> did NOT beat the baseline
+  0 of 27 settings beat the baseline out of sample (baseline OOS +424.1%).

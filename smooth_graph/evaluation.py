@@ -3,14 +3,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
-from numpy.lib.stride_tricks import sliding_window_view
 
 from . import backtest
 from .backtest import FX_FEE_RATE, INITIAL_BALANCE, BacktestResult, run_backtest
 from .portfolio import Portfolio
+from .regression import window_stats_all
 
 BARS_PER_YEAR = 252
 GREEN, GOLD = "tab:green", "goldenrod"
+# Trade-level statistics are meaningless on a handful of trades; the report
+# suppresses the hit rate below this many.
+MIN_TRADES_FOR_STATS = 10
+# Pre-registered in-sample / out-of-sample boundary. It is deliberately fixed
+# before looking at any result: the first ~9 years are for choosing settings,
+# the remaining ~12 are evaluated once. Do not move it after reading a grid.
+SPLIT_DATE = pd.Timestamp("2014-12-31")
 
 
 # ---------------------------------------------------------------- statistics
@@ -49,6 +56,78 @@ def summarise(result: BacktestResult) -> pd.DataFrame:
         "Time invested (%)": (invested, 100.0),
     }
     return pd.DataFrame(rows, index=["Strategy", "Baseline"]).T
+
+
+def range_metrics(result: BacktestResult, start=None, end=None) -> dict:
+    """Strategy vs baseline statistics over a date window.
+
+    Returns are measured from the last traded bar *before* `start` (or the first
+    bar of the window when there is none), so the window's first bar already
+    carries a day of return. Trades are those executed inside the window.
+
+    This is the building block for the pre-registered in-sample / out-of-sample
+    split: choose settings on `range_metrics(result, end=SPLIT_DATE)` and report
+    `range_metrics(result, start=SPLIT_DATE + 1 day)` exactly once.
+    """
+    dates = result.dates
+    if len(dates) == 0:
+        raise ValueError("cannot measure an empty backtest")
+    start = dates[0] if start is None else pd.Timestamp(start)
+    end = dates[-1] if end is None else pd.Timestamp(end)
+
+    first = int(dates.searchsorted(start, side="left"))
+    last = int(dates.searchsorted(end, side="right")) - 1
+    if first > last:
+        raise ValueError(f"no traded bars between {start.date()} and {end.date()}")
+
+    base = max(first - 1, 0)
+    bars = last - base
+
+    def growth(values):
+        return float(values[last] / values[base] - 1)
+
+    def annualised(values):
+        return float((1 + growth(values)) ** (BARS_PER_YEAR / bars) - 1) if bars > 0 else float("nan")
+
+    def drawdown(values):
+        window = values[base:last + 1]
+        return float((window / np.maximum.accumulate(window) - 1).min())
+
+    s, b = result.strategy_values, result.baseline_values
+    traded = result.trades.index
+    n_trades = int(((traded > dates[base]) & (traded <= dates[last])).sum())
+    invested = holding_timeline(result).iloc[first:last + 1].notna().mean()
+
+    return {
+        "start": dates[first],
+        "end": dates[last],
+        "bars": int(bars),
+        "strategy_return_pct": 100 * growth(s),
+        "baseline_return_pct": 100 * growth(b),
+        "excess_return_pct": 100 * (growth(s) - growth(b)),
+        "strategy_annualised_pct": 100 * annualised(s),
+        "baseline_annualised_pct": 100 * annualised(b),
+        "strategy_max_drawdown_pct": 100 * drawdown(s),
+        "baseline_max_drawdown_pct": 100 * drawdown(b),
+        "strategy_final": float(s[last]),
+        "baseline_final": float(b[last]),
+        "trades": n_trades,
+        "time_invested_pct": 100 * float(invested),
+        # Compare growth over THIS window, not final levels: the strategy may
+        # enter the window with a large lead carried over from earlier.
+        "beats_baseline": bool(growth(s) > growth(b)),
+    }
+
+
+def in_sample_metrics(result: BacktestResult, split_date=SPLIT_DATE) -> dict:
+    """Statistics from the start of trading up to the pre-registered split."""
+    return range_metrics(result, result.dates[0], split_date)
+
+
+def out_of_sample_metrics(result: BacktestResult, split_date=SPLIT_DATE) -> dict:
+    """Statistics from the first bar after the pre-registered split to the end."""
+    start = max(pd.Timestamp(split_date) + pd.Timedelta(days=1), result.dates[0])
+    return range_metrics(result, start, result.dates[-1])
 
 
 def hit_rate(result: BacktestResult, horizon: int = 15):
@@ -115,24 +194,6 @@ def shifted_timeline_control(result: BacktestResult, n_runs: int = 300, seed: in
 
 
 # ------------------------------------------------ noise check: signal frequency
-def window_stats_all(values, window: int):
-    """t-statistic, vertex and curvature for EVERY rolling window at once.
-    A vectorised version of regression.fit_window (a test checks they agree)."""
-    values = np.asarray(values, dtype=float)
-    u = np.arange(-(window - 1), 1).astype(float)
-    X = np.vander(u, 3)                                  # columns: u**2, u, 1
-    xtx_inv = np.linalg.inv(X.T @ X)
-    windows = sliding_window_view(values, window)        # one row per window
-    coef = windows @ (xtx_inv @ X.T).T
-    residuals = windows - coef @ X.T
-    s2 = (residuals ** 2).sum(axis=1) / (window - 3)
-    a, b = coef[:, 0], coef[:, 1]
-    with np.errstate(divide="ignore", invalid="ignore"):
-        t = a / np.sqrt(s2 * xtx_inv[0, 0])
-        vertex = -b / (2 * a)
-    return t, vertex, a
-
-
 def _count_trades(t, vertex, a, threshold: float, max_age: int) -> int:
     """How many trades the strategy rules would make on these per-bar statistics
     (cash start, one-bar delay, never queue what is already held)."""
@@ -162,23 +223,161 @@ def noise_trade_counts(result: BacktestResult, n_sims: int = 200, seed: int = 0)
     return np.array(counts)
 
 
+# ------------------------------------------------------- signal diagnostics
+def signal_diagnostics(result: BacktestResult) -> dict[str, float]:
+    """How often each gate fires, and how often luck alone would fire.
+
+    These are the numbers that explain a low trade count. In particular:
+    `share_significant_with_recent_vertex_pct` is usually tiny because a large
+    curvature t-statistic selects vertices near the middle of the window, while
+    `median_vertex_when_significant` shows where they actually sit.
+    """
+    t = np.asarray(result.t_stats, dtype=float)
+    vertex = np.asarray(result.vertices, dtype=float)
+    n = len(t)
+    if n == 0:
+        return {k: float("nan") for k in (
+            "bars", "significant_bars", "significant_rate_pct",
+            "recent_vertex_bars", "recent_vertex_rate_pct",
+            "joint_bars", "joint_rate_pct", "noise_joint_rate_pct",
+            "noise_joint_events", "median_vertex_when_significant",
+            "share_significant_with_recent_vertex_pct",
+        )}
+
+    significant = np.abs(t) >= result.t_threshold
+    recent = (vertex >= -result.max_age) & (vertex <= 0)
+    joint = significant & recent
+    significant_vertices = vertex[significant & np.isfinite(vertex)]
+
+    return {
+        "bars": float(n),
+        "significant_bars": float(significant.sum()),
+        "significant_rate_pct": float(100 * significant.mean()),
+        "recent_vertex_bars": float(recent.sum()),
+        "recent_vertex_rate_pct": float(100 * recent.mean()),
+        "joint_bars": float(joint.sum()),
+        "joint_rate_pct": float(100 * joint.mean()),
+        "noise_joint_rate_pct": float(100 * result.noise_joint_rate),
+        "noise_joint_events": float(result.noise_joint_rate * n),
+        "median_vertex_when_significant": (
+            float(np.median(significant_vertices)) if len(significant_vertices) else float("nan")
+        ),
+        "share_significant_with_recent_vertex_pct": (
+            float(100 * joint.sum() / significant.sum()) if significant.sum() else float("nan")
+        ),
+    }
+
+
 # ------------------------------------------------------ sensitivity grid
+def default_age_fractions() -> tuple[float, ...]:
+    """Age fractions the grid always includes, with the default first.
+
+    Deduplicated so changing the default to a value already in the grid (e.g.
+    0.5) does not produce a repeated row.
+    """
+    fractions = (backtest.MAX_AGE_FRACTION, 0.35, 0.5, 0.65)
+    unique = []
+    for frac in fractions:
+        if not any(abs(frac - seen) < 1e-9 for seen in unique):
+            unique.append(frac)
+    return tuple(unique)
+
+
+def is_neighbour_median(table: pd.DataFrame, column: str = "IS_return_pct") -> pd.Series:
+    """Median `column` over each cell's 3x3 neighbourhood in the grid.
+
+    The neighbourhood spans +/- one quantile and +/- one age fraction inside the
+    same window. A cell with a good value but bad neighbours is a spike, not a
+    finding; the median is the robust version of "is the region good?".
+
+    Returns a Series aligned with `table.index` (NaN where a cell is missing).
+    """
+    out = pd.Series(np.nan, index=table.index, dtype=float)
+    for _window, group in table.groupby("window", sort=False):
+        pivot = group.pivot(index="quantile", columns="age_fraction", values=column)
+        quantiles = list(pivot.index)
+        fractions = list(pivot.columns)
+        for qi, q in enumerate(quantiles):
+            for fi, frac in enumerate(fractions):
+                block = pivot.iloc[max(0, qi - 1):qi + 2,
+                                   max(0, fi - 1):fi + 2].to_numpy().ravel()
+                value = float(np.nanmedian(block))
+                rows = group.index[
+                    (group["quantile"] == q) & np.isclose(group["age_fraction"], frac)
+                ]
+                out.loc[rows] = value
+    return out
+
+
+def best_in_sample_cell(table: pd.DataFrame, column: str = "IS_return_pct") -> pd.Series:
+    """Pick a cell using in-sample data only, by neighbour-robust median.
+
+    This is the honest selection rule: rank on the 3x3 neighbourhood median of
+    the in-sample column, not the single best in-sample cell, then break ties by
+    the cell's own in-sample value. The caller reports the chosen cell's
+    out-of-sample column once; it must not feed back into the choice.
+    """
+    if table.empty:
+        raise ValueError("cannot select from an empty table")
+    if "IS_neighbour_median" not in table.columns:
+        table = table.assign(IS_neighbour_median=is_neighbour_median(table, column))
+    ranked = table.sort_values(["IS_neighbour_median", column], ascending=False, kind="stable")
+    return ranked.iloc[0]
+
+
 def sensitivity_table(data, windows=(20, 30, 45), quantiles=(90.0, 95.0, 99.0),
-                      age_fractions=(0.25, 0.5)) -> pd.DataFrame:
+                      age_fractions=None, noise_sims: int = 100,
+                      control_runs: int = 100) -> pd.DataFrame:
     """Re-run the backtest over a grid of settings. Judge the STABILITY of the
-    pattern, not the single best cell (picking the best cell is just overfitting)."""
+    pattern, not the single best cell (picking the best cell is just overfitting).
+
+    The first age fraction defaults to `backtest.MAX_AGE_FRACTION`, so the
+    default configuration is always one of the cells. `noise_trades_median` and
+    `beats_control_pct` say whether a cell's action is distinguishable from luck;
+    a high final value with a noise-like trade count is not evidence.
+
+    `IS_*` and `OOS_*` columns split at the pre-registered `SPLIT_DATE`; they are
+    for evaluation, not for choosing settings. Selection must use the in-sample
+    columns only (`best_in_sample_cell`).
+    """
+    if age_fractions is None:
+        age_fractions = default_age_fractions()
+
     rows = []
     for w in windows:
         for q in quantiles:
             for frac in age_fractions:
                 res = run_backtest(window_bars=w, t_quantile=q, max_age=max(1, round(w * frac)),
                                    warmup_bars=backtest.WARMUP_BARS, data=data)
+                noise = noise_trade_counts(res, n_sims=noise_sims)
+                finals = shifted_timeline_control(res, n_runs=control_runs)
+                try:
+                    in_sample = in_sample_metrics(res)
+                except ValueError:      # split outside this result's range
+                    in_sample = {}
+                try:
+                    out_sample = out_of_sample_metrics(res)
+                except ValueError:
+                    out_sample = {}
                 rows.append({
-                    "window": w, "quantile": q, "max_age": res.max_age,
+                    "window": w, "quantile": q, "age_fraction": frac, "max_age": res.max_age,
                     "trades": res.trade_count,
                     "strategy_GBP": round(float(res.strategy_values[-1]), 1),
                     "baseline_GBP": round(float(res.baseline_values[-1]), 1),
                     "beats_baseline": bool(res.strategy_values[-1] > res.baseline_values[-1]),
+                    "IS_return_pct": round(in_sample.get("strategy_return_pct", np.nan), 1),
+                    "IS_baseline_pct": round(in_sample.get("baseline_return_pct", np.nan), 1),
+                    "IS_trades": in_sample.get("trades", np.nan),
+                    "IS_beats_baseline": in_sample.get("beats_baseline", np.nan),
+                    "OOS_return_pct": round(out_sample.get("strategy_return_pct", np.nan), 1),
+                    "OOS_baseline_pct": round(out_sample.get("baseline_return_pct", np.nan), 1),
+                    "OOS_trades": out_sample.get("trades", np.nan),
+                    "OOS_beats_baseline": out_sample.get("beats_baseline", np.nan),
+                    "noise_trades_median": float(np.median(noise)) if len(noise) else float("nan"),
+                    "beats_control_pct": (
+                        round(100 * float((res.strategy_values[-1] > finals).mean()), 1)
+                        if len(finals) else float("nan")
+                    ),
                 })
     return pd.DataFrame(rows)
 

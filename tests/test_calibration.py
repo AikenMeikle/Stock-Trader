@@ -1,6 +1,11 @@
 import numpy as np
 import pytest
-from smooth_graph.regression import calibrate_threshold, fit_window
+from smooth_graph.regression import (
+    calibrate_joint_threshold,
+    calibrate_threshold,
+    fit_window,
+    noise_joint_rate,
+)
 
 STEPS = np.random.default_rng(42).normal(0, 0.01, 5000)   # stand-in for real daily log changes
 
@@ -43,3 +48,45 @@ def test_definition_noise_exceeds_threshold_about_5_percent_of_the_time():
     rng = np.random.default_rng(999)                     # DIFFERENT seed: fresh noise
     exceed = [abs(fit_window(np.cumsum(rng.choice(STEPS, 30))).t_stat) > thr for _ in range(2000)]
     assert 0.03 < np.mean(exceed) < 0.07
+
+
+# ---- joint-gate calibration ---------------------------------------------------------
+def test_joint_threshold_achieves_the_requested_joint_rate():
+    target = 0.02
+    thr = calibrate_joint_threshold(STEPS, 30, max_age=7, target_rate=target,
+                                    n_sims=8000, seed=3)
+    achieved = noise_joint_rate(STEPS, 30, max_age=7, threshold=thr,
+                                n_sims=8000, seed=99)     # fresh noise
+    assert achieved == pytest.approx(target, abs=0.006)
+
+
+def test_joint_threshold_is_higher_for_a_rarer_target():
+    common = calibrate_joint_threshold(STEPS, 30, 7, target_rate=0.02, seed=0)
+    rare = calibrate_joint_threshold(STEPS, 30, 7, target_rate=0.002, seed=0)
+    assert rare > common
+
+
+def test_joint_threshold_is_reproducible():
+    a = calibrate_joint_threshold(STEPS, 30, 7, target_rate=0.01, seed=5)
+    b = calibrate_joint_threshold(STEPS, 30, 7, target_rate=0.01, seed=5)
+    assert a == b
+
+
+def test_joint_threshold_rejects_an_unattainable_target():
+    # With a one-bar recency gate, very few null vertices qualify; asking the
+    # full rule to fire on half of all bars is impossible.
+    with pytest.raises(ValueError, match="unattainable"):
+        calibrate_joint_threshold(STEPS, 30, max_age=1, target_rate=0.5,
+                                  n_sims=2000, seed=0)
+
+
+def test_joint_threshold_rejects_a_bad_rate():
+    with pytest.raises(ValueError):
+        calibrate_joint_threshold(STEPS, 30, 7, target_rate=0.0)
+
+
+def test_noise_joint_rate_is_not_the_marginal_t_rate():
+    # The whole point: the joint rule fires far less often than "5% of |t|" suggests.
+    marginal = calibrate_threshold(STEPS, 30, quantile=95)
+    joint = noise_joint_rate(STEPS, 30, max_age=7, threshold=marginal, n_sims=8000, seed=0)
+    assert joint < 0.005

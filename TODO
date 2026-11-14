@@ -1,7 +1,0 @@
-Plot on the SPY/GLD graph the buy and sell points
-Plot a graph comparing a portfolio just holding SPY and our portfolio
-Fine tune lam, threshold values
-Clean up code
-
-NOT CONVINCED THE CURRENT STATIONARY POINT MATH WORKS
-INSTEAD, MAYBE TRY FIT THE MOST RECENT DATA TO A QUADRATIC / CUBIC AND FIND THE STATIONARY points
