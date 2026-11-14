@@ -1,0 +1,44 @@
+Window 30 bars | quantile 95.0 | max age 7 | calibrated t-threshold 8.56
+Warm-up bars (calibration only): 250
+Traded 2005-12-28 -> 2026-11-13 (5253 bars)
+
+                         Strategy  Baseline
+Final value (GBP)          8603.4   11365.8
+Total return (%)            760.3    1036.6
+Annualised return (%)        10.9      12.4
+Max drawdown (%)            -32.4     -35.0
+Return, first half (%)      164.8     148.0
+Return, second half (%)     224.9     359.0
+Trades                        2.0       0.0
+Time invested (%)            89.9     100.0
+
+Hit rate: the ratio moved the expected way over the next 15 bars after 50% of 2 trades
+Shifted-timeline control: strategy beat 56% of 300 runs that spend the same time in cash/SPY/GLD at the wrong times (median 7,858 GBP)
+Noise check: real data made 2 trades; the same rules on shuffled versions of your own daily changes make a median of 2 [1-4] (5th-95th percentile)
+
+Trades (execution date, ticker bought):
+           bought
+date             
+2008-02-06    SPY
+2015-03-16    GLD
+
+Sensitivity (judge the pattern, not the best row):
+ window  quantile  max_age  trades  strategy_GBP  baseline_GBP  beats_baseline
+     20      90.0        5       3        8731.1       11365.8           False
+     20      90.0       10      65       10654.8       11365.8           False
+     20      95.0        5       1        3572.4       11365.8           False
+     20      95.0       10      29       10082.7       11365.8           False
+     20      99.0        5       1        3560.6       11365.8           False
+     20      99.0       10       6        4234.2       11365.8           False
+     30      90.0        8       5        5736.1       11365.8           False
+     30      90.0       15      43        4401.2       11365.8           False
+     30      95.0        8       2        8195.9       11365.8           False
+     30      95.0       15      21       14326.2       11365.8            True
+     30      99.0        8       0        1000.0       11365.8           False
+     30      99.0       15       5        4245.1       11365.8           False
+     45      90.0       11       2        3268.7       11365.8           False
+     45      90.0       22      21       19073.3       11365.8            True
+     45      95.0       11       1        3677.8       11365.8           False
+     45      95.0       22      10        4215.6       11365.8           False
+     45      99.0       11       0        1000.0       11365.8           False
+     45      99.0       22       2        3228.0       11365.8           False

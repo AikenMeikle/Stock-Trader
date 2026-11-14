@@ -1,0 +1,1 @@
+"""Backtest harness for the SPY/GLD quadratic-curvature allocation strategy."""

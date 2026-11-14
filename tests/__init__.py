@@ -1,0 +1,1 @@
+"""Tests for the smooth_graph package (synthetic data, no network needed)."""
