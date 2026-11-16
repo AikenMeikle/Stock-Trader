@@ -62,11 +62,22 @@ class QuadraticStrategy(SwapStrategy):
 
     In THIS class, `threshold` means the t-statistic threshold from
     calibrate_threshold, NOT a gradient threshold.
+
+    `fallback` is the Phase 3 exit rule. When it is a ticker, a held position
+    with no live signal support is rotated into that ticker instead of being
+    held forever. "Support" means the fitted turning point is still recent:
+    `-max_age <= vertex <= 0`. The rule deliberately does NOT re-check the
+    t-statistic: an insignificant-but-recent turn still supports the position,
+    while a turn that has aged out of the recency window does not. `None`
+    disables the exit rule and reproduces the pre-Phase-3 behaviour.
     """
 
-    def __init__(self, threshold: float, max_age: int) -> None:
+    def __init__(self, threshold: float, max_age: int, fallback: str | None = None) -> None:
         super().__init__(threshold=threshold)
         self.max_age = max_age
+        if fallback not in (None, "SPY", "GLD"):
+            raise ValueError(f"fallback must be None, 'SPY' or 'GLD', got {fallback!r}")
+        self.fallback = fallback
 
     def update(self, portfolio: Portfolio, fit: WindowFit, prices: pd.Series) -> None:
         # ORDER MATTERS: execute yesterday's order first, THEN look at today's signal.
@@ -74,11 +85,20 @@ class QuadraticStrategy(SwapStrategy):
         self._queue_signal(portfolio, fit)
 
     def _queue_signal(self, portfolio: Portfolio, fit: WindowFit) -> None:
+        held = portfolio.get_current_stock()
         target = decide_target(fit=fit, threshold=self.threshold, max_age=self.max_age)
-        if target is None:
+
+        if target is not None:
+            if target == held:
+                return
+            self.pending_swap = target
             return
 
-        if target in portfolio.holdings.keys():
+        # No fresh entry signal. If the turn that justified the position is no
+        # longer recent (aged out, moved into the future, or undefined), the
+        # position has lost its support: rotate to the fallback asset. A stale
+        # GLD position is the failure this rule exists to prevent.
+        if self.fallback is None or held is None or held == self.fallback:
             return
-
-        self.pending_swap = target
+        if not (-self.max_age <= fit.vertex <= 0):
+            self.pending_swap = self.fallback

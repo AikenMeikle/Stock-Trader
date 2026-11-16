@@ -28,6 +28,11 @@ T_QUANTILE = 95.0       # luck-only t-statistics exceed the threshold 5% of the 
 # was not chosen by ranking grid returns; see DIAGNOSIS.md.
 MAX_AGE_FRACTION = 0.5      # half the window: ~window/2
 MAX_AGE = max(1, round(WINDOW * MAX_AGE_FRACTION))   # 15 bars
+# Phase 3 exit rule: when a held position's turn is no longer recent, rotate
+# into this asset rather than holding a stale position forever. SPY is the
+# benchmark and the natural neutral holding for a long-only allocator; cash is
+# itself a market-timing bet. `None` disables the rule.
+FALLBACK = "SPY"
 WARMUP_BARS = 250       # bars used ONLY to calibrate the threshold; trading starts after
                         # them (must be >= the window)
 
@@ -55,6 +60,7 @@ class BacktestResult:
     max_age: int
     warmup_bars: int
     target_signal_rate: float | None = None   # set when the joint rule was calibrated
+    fallback: str | None = None               # Phase 3 stale-signal exit target
 
 
 def run_backtest(
@@ -63,7 +69,9 @@ def run_backtest(
     max_age: int = MAX_AGE,
     warmup_bars: int = WARMUP_BARS,
     target_signal_rate: float | None = None,
+    fallback: str | None = FALLBACK,
     data=None,
+    fx_fee_rate: float = FX_FEE_RATE,
 ) -> BacktestResult:
     """Run the strategy and the buy-and-hold baseline over the history.
 
@@ -73,6 +81,13 @@ def run_backtest(
     By default the threshold is calibrated on the marginal |t| quantile (the old
     behaviour). Pass `target_signal_rate` to calibrate the FULL decision rule to
     fire on that share of bars under the luck null; `t_quantile` is then ignored.
+
+    `fallback` is the Phase 3 exit policy: a held position whose fitted turn is
+    no longer recent is rotated into this ticker. `None` disables the rule.
+
+    `fx_fee_rate` defaults to the unchanged `FX_FEE_RATE`; it is exposed only so
+    evaluation can run friction-sensitivity scenarios without altering the
+    strategy default.
     """
     assert warmup_bars >= window_bars, "the first window must fit inside the warm-up"
     ratio_series, price_history = data if data is not None else load_price_data()
@@ -102,14 +117,14 @@ def run_backtest(
     )
 
     strategy_portfolio = Portfolio(
-        fx_fee_rate=FX_FEE_RATE, initial_balance=INITIAL_BALANCE
+        fx_fee_rate=fx_fee_rate, initial_balance=INITIAL_BALANCE
     )
-    strategy = QuadraticStrategy(threshold=t_threshold, max_age=max_age)
+    strategy = QuadraticStrategy(threshold=t_threshold, max_age=max_age, fallback=fallback)
 
     # The baseline buys SPY on the FIRST TRADED bar, the same day the strategy
     # starts, so both are measured over exactly the same period.
     baseline_portfolio = Portfolio(
-        fx_fee_rate=FX_FEE_RATE, initial_balance=INITIAL_BALANCE
+        fx_fee_rate=fx_fee_rate, initial_balance=INITIAL_BALANCE
     )
     first_prices = price_history.loc[ratio_series.index[warmup_bars - 1]]
     baseline_portfolio.update_conversion(float(first_prices["GBPUSD"]))
@@ -161,4 +176,5 @@ def run_backtest(
         max_age=max_age,
         warmup_bars=warmup_bars,
         target_signal_rate=target_signal_rate,
+        fallback=fallback,
     )

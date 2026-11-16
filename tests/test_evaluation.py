@@ -17,7 +17,7 @@ def curvy_result():
     return backtest.run_backtest(data=curvy_data())
 
 
-def tiny_result(strategy, baseline, trades=(), log_ratio=None):
+def tiny_result(strategy, baseline, trades=(), log_ratio=None, fallback=None):
     n = len(strategy)
     dates = pd.bdate_range("2020-01-01", periods=n)
     if log_ratio is None:
@@ -28,7 +28,8 @@ def tiny_result(strategy, baseline, trades=(), log_ratio=None):
         t_stats=np.zeros(n), vertices=np.full(n, -1.0),
         prices=pd.DataFrame({"SPY": 1.0, "GLD": 1.0, "GBPUSD": 1.0}, index=dates),
         log_ratio=log_ratio, trades=trades, t_threshold=8.0, noise_joint_rate=0.0,
-        trade_count=len(trades), window_bars=30, t_quantile=95.0, max_age=7, warmup_bars=250)
+        trade_count=len(trades), window_bars=30, t_quantile=95.0, max_age=7, warmup_bars=250,
+        fallback=fallback)
 
 
 # ---- statistics -----------------------------------------------------------------
@@ -45,6 +46,26 @@ def test_summarise_known_values():
     assert table.loc["Total return (%)", "Baseline"] == pytest.approx(0.0)
     assert table.loc["Max drawdown (%)", "Strategy"] == 0.0
     assert table.loc["Time invested (%)", "Baseline"] == 100.0
+
+
+def test_holding_periods_lists_each_contiguous_spell():
+    dates = pd.bdate_range("2020-01-01", periods=6)
+    r = tiny_result([1000] * 6, [1000] * 6,
+                    trades=[(dates[1], "SPY"), (dates[4], "GLD")])
+    periods = ev.holding_periods(r)
+    assert list(periods["holding"]) == ["CASH", "SPY", "GLD"]
+    assert list(periods["bars"]) == [1, 3, 2]
+    assert periods["start"].iloc[0] == dates[0]
+    assert periods["end"].iloc[0] == dates[0]
+    assert periods["start"].iloc[2] == dates[4]
+    assert periods["end"].iloc[2] == dates[5]
+    assert periods["bars"].sum() == len(dates)
+
+
+def test_holding_periods_of_an_empty_run_is_an_empty_table():
+    periods = ev.holding_periods(tiny_result([], []))
+    assert list(periods.columns) == ["start", "end", "holding", "bars"]
+    assert len(periods) == 0
 
 
 # ---- range metrics / IS-OOS -----------------------------------------------------------
@@ -159,7 +180,24 @@ def test_trade_count_from_the_vectorised_rules_matches_the_real_strategy(curvy_r
     t, vertex, a = ev.window_stats_all(r.log_ratio.to_numpy(), r.window_bars)
     first = r.warmup_bars - r.window_bars          # index of the first traded window
     assert len(t[first:]) == len(r.dates)
-    assert ev._count_trades(t[first:], vertex[first:], a[first:], r.t_threshold, r.max_age) == r.trade_count
+    assert ev._count_trades(t[first:], vertex[first:], a[first:], r.t_threshold, r.max_age,
+                            fallback=r.fallback) == r.trade_count
+
+
+def test_vectorised_trade_count_models_the_fallback_exit():
+    # One significant SPY entry, then no more signals. With no fallback the
+    # position is held forever (one trade); with a fallback the stale vertex
+    # rotates it out (two trades).
+    t = np.array([10.0, 0.0, 0.0])
+    vertex = np.array([-1.0, -20.0, -20.0])
+    a = np.array([-0.01, -0.01, -0.01])   # significant cap -> buy GLD
+    assert ev._count_trades(t, vertex, a, 8.0, 7, fallback=None) == 1
+    assert ev._count_trades(t, vertex, a, 8.0, 7, fallback="SPY") == 2
+
+
+def test_vectorised_trade_count_rejects_an_unknown_fallback():
+    with pytest.raises(ValueError, match="fallback"):
+        ev._count_trades(np.zeros(1), np.zeros(1), np.zeros(1), 8.0, 7, fallback="CASH")
 
 
 def test_noise_trade_counts_one_per_sim_and_reproducible(curvy_result):

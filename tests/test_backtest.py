@@ -29,9 +29,9 @@ def run_with_spies(monkeypatch, data):
     rate_at_update = []     # the FX rate the portfolio held WHEN the strategy was about to trade
 
     class StrategySpy(RealStrategy):
-        def __init__(self, threshold, max_age):
-            strategies.append((threshold, max_age))
-            super().__init__(threshold=threshold, max_age=max_age)
+        def __init__(self, threshold, max_age, fallback=None):
+            strategies.append((threshold, max_age, fallback))
+            super().__init__(threshold=threshold, max_age=max_age, fallback=fallback)
 
         def update(self, portfolio, fit, prices):
             rate_at_update.append(portfolio.rates[-1] if portfolio.rates else None)
@@ -98,7 +98,9 @@ def test_calibration_runs_once_on_warmup_bars_only(quiet):
 
 
 def test_strategy_gets_the_calibrated_threshold_and_max_age(quiet):
-    assert quiet["strategies"] == [(quiet["calibrations"][0]["result"], backtest.MAX_AGE)]
+    assert quiet["strategies"] == [
+        (quiet["calibrations"][0]["result"], backtest.MAX_AGE, backtest.FALLBACK)
+    ]
 
 
 def test_ratio_series_is_left_untouched(quiet):
@@ -110,6 +112,13 @@ def test_result_records_vertices_and_the_luck_only_fire_rate(quiet):
     assert len(r.vertices) == len(r.dates)
     assert 0.0 <= r.noise_joint_rate <= 1.0
     assert r.target_signal_rate is None
+    assert r.fallback == backtest.FALLBACK
+
+
+def test_fallback_can_be_disabled_explicitly():
+    res = backtest.run_backtest(fallback=None, data=curvy_data())
+    assert res.fallback is None
+    assert len(res.trades) == res.trade_count
 
 
 def test_target_signal_rate_calibrates_the_full_rule():

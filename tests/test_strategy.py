@@ -11,10 +11,13 @@ PRICES = pd.Series({"SPY": 500.0, "GLD": 200.0, "GBPUSD": 1.25})
 CUP = WindowFit(a=0.01, t_stat=12.0, vertex=-3.0)        # strong recent minimum -> "SPY"
 CAP = WindowFit(a=-0.01, t_stat=-12.0, vertex=-3.0)      # strong recent maximum -> "GLD"
 NO_SIGNAL = WindowFit(a=0.01, t_stat=1.0, vertex=-3.0)   # too weak -> None
+STALE = WindowFit(a=-0.01, t_stat=1.0, vertex=-20.0)     # no signal, turn aged out
+FUTURE = WindowFit(a=-0.01, t_stat=1.0, vertex=3.0)      # no signal, turn in the future
+UNDEFINED = WindowFit(a=-0.01, t_stat=1.0, vertex=float("nan"))
 
 
-def make_strategy():
-    return QuadraticStrategy(threshold=8.0, max_age=7)
+def make_strategy(fallback=None):
+    return QuadraticStrategy(threshold=8.0, max_age=7, fallback=fallback)
 
 
 def make_portfolio(holding=None):
@@ -90,3 +93,59 @@ def test_repeated_signal_does_not_cause_repeated_trades():
         s.update(p, CUP, PRICES)
     assert p.get_current_stock() == "SPY"
     assert s.trade_count == 1
+
+
+# ---- Phase 3 exit rule --------------------------------------------------------
+def test_stale_vertex_rotates_a_held_position_into_the_fallback():
+    p, s = make_portfolio("GLD"), make_strategy(fallback="SPY")
+    s.update(p, STALE, PRICES)
+    assert s.pending_swap == "SPY"             # queued, not yet traded
+    s.update(p, STALE, PRICES)
+    assert p.get_current_stock() == "SPY"
+    assert s.trade_count == 1
+
+
+def test_future_vertex_also_counts_as_lost_support():
+    p, s = make_portfolio("GLD"), make_strategy(fallback="SPY")
+    s.update(p, FUTURE, PRICES)
+    assert s.pending_swap == "SPY"
+
+
+def test_undefined_vertex_counts_as_lost_support():
+    p, s = make_portfolio("GLD"), make_strategy(fallback="SPY")
+    s.update(p, UNDEFINED, PRICES)
+    assert s.pending_swap == "SPY"
+
+
+def test_insignificant_but_recent_vertex_still_supports_the_position():
+    # The exit rule deliberately does NOT re-check the t-statistic: a weak turn
+    # that is still inside the recency window is not a reason to sell.
+    p, s = make_portfolio("GLD"), make_strategy(fallback="SPY")
+    for _ in range(6):
+        s.update(p, NO_SIGNAL, PRICES)
+    assert p.get_current_stock() == "GLD"
+    assert s.pending_swap == ""
+    assert s.trade_count == 0
+
+
+def test_fallback_none_disables_the_exit_rule():
+    p, s = make_portfolio("GLD"), make_strategy(fallback=None)
+    for _ in range(6):
+        s.update(p, STALE, PRICES)
+    assert p.get_current_stock() == "GLD"
+    assert s.pending_swap == ""
+    assert s.trade_count == 0
+
+
+def test_no_exit_when_the_position_is_already_the_fallback():
+    p, s = make_portfolio("SPY"), make_strategy(fallback="SPY")
+    for _ in range(6):
+        s.update(p, STALE, PRICES)
+    assert p.get_current_stock() == "SPY"
+    assert s.pending_swap == ""
+    assert s.trade_count == 0
+
+
+def test_invalid_fallback_is_rejected():
+    with pytest.raises(ValueError, match="fallback"):
+        QuadraticStrategy(threshold=8.0, max_age=7, fallback="CASH")

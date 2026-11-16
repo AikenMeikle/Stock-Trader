@@ -1,92 +1,243 @@
 Window 30 bars | quantile 95.0 | max age 15 | calibrated t-threshold 8.56
+Exit rule: rotate a stale position to SPY when the fitted vertex leaves [-15, 0]
 Warm-up bars (calibration only): 250
 Traded 2005-12-28 -> 2026-11-13 (5253 bars)
 
                          Strategy  Baseline
-Final value (GBP)         14326.2   11365.8
-Total return (%)           1332.6    1036.6
-Annualised return (%)        13.6      12.4
-Max drawdown (%)            -23.0     -35.0
-Return, first half (%)      419.3     148.0
-Return, second half (%)     175.9     359.0
-Trades                       21.0       0.0
+Final value (GBP)         12312.0   11365.8
+Total return (%)           1131.2    1036.6
+Annualised return (%)        12.8      12.4
+Max drawdown (%)            -38.6     -35.0
+Return, first half (%)      180.8     148.0
+Return, second half (%)     338.5     359.0
+Trades                       39.0       0.0
 Time invested (%)            99.3     100.0
+
+Longest holding period: SPY for 883 bars (2018-01-12 -> 2021-07-16)
+Longest non-SPY invested holding: GLD for 14 bars (2015-03-16 -> 2015-04-02)
 
 Signal diagnostics (why this many trades?):
   Bars with |t| >= 8.56: 197 (3.75% of 5253)
   Bars with a vertex within 15 bars: 1884 (35.87%)
   Bars passing BOTH gates: 104 (1.980%)
-  Luck alone passes both at 2.510% (~131.9 events over this period)
+  Luck alone passes both at 2.500% (~131.3 events over this period)
   Median vertex when significant: -14.8 bars (the gate asks for <= 15)
   Share of significant bars that also pass the age gate: 52.8%
 
 In-sample / out-of-sample (pre-registered split 2014-12-31):
                    Return  Baseline   Max DD  Trades
-  In-sample       +341.7%   +117.2%   -20.4%      10
-  Out-of-sample   +224.4%   +424.1%   -23.0%      11
+  In-sample       +106.3%   +117.2%   -38.6%      19
+  Out-of-sample   +496.8%   +424.1%   -26.0%      20
   The split is fixed before looking at results; the defaults were chosen structurally, not by IS return ranking.
 
-Hit rate: the ratio moved the expected way over the next 15 bars after 57% of 21 trades
-Shifted-timeline control: strategy beat 77% of 300 runs that spend the same time in cash/SPY/GLD at the wrong times (median 8,417 GBP)
-Noise check: real data made 21 trades; the same rules on shuffled versions of your own daily changes make a median of 25 [17-33] (5th-95th percentile)
+Hit rate: the ratio moved the expected way over the next 15 bars after 62% of 39 trades
+Shifted-timeline control: strategy beat 89% of 300 runs that spend the same time in cash/SPY/GLD at the wrong times (median 10,014 GBP)
+Noise check: real data made 39 trades; the same rules on shuffled versions of your own daily changes make a median of 43 [32-55] (5th-95th percentile)
+
+Detour attribution (every non-SPY holding spell; GLD spells are the detours):
+holding entry_date  exit_date exit_execution_date  bars  ratio_log_change  gross_excess_return  switch_cost  net_excess_return  notional_gbp  net_excess_gbp
+   CASH 2005-12-28 2006-02-16          2006-02-17    35             -4.16                -1.09         0.15              -1.24        1000.0           -12.0
+    GLD 2006-07-11 2006-07-13          2006-07-14     3             -6.25                 6.28         0.60               5.68         937.0            53.0
+    GLD 2008-05-23 2008-06-02          2008-06-03     6              5.21                -5.15         0.60              -5.75        1049.0           -60.0
+    GLD 2010-01-14 2010-01-29          2010-02-01    11             -1.90                 1.87         0.60               1.27        1032.0            13.0
+    GLD 2010-04-12 2010-04-26          2010-04-27    11             -2.48                 2.51         0.60               1.91        1160.0            22.0
+    GLD 2010-08-20 2010-08-20          2010-08-23     1             -0.22                 0.22         0.60              -0.38        1056.0            -4.0
+    GLD 2013-07-25 2013-08-05          2013-08-06     8              4.19                -4.11         0.60              -4.71        1775.0           -84.0
+    GLD 2013-12-18 2013-12-20          2013-12-23     3              2.75                -2.73         0.60              -3.33        1700.0           -57.0
+    GLD 2014-06-26 2014-07-02          2014-07-03     5              1.06                -1.06         0.60              -1.66        1754.0           -29.0
+    GLD 2014-11-26 2014-12-10          2014-12-11    10             -3.85                 3.85         0.60               3.25        1985.0            65.0
+    GLD 2015-03-16 2015-04-02          2015-04-06    14             -5.09                 5.16         0.60               4.56        2159.0            98.0
+    GLD 2015-08-17 2015-08-21          2015-08-24     5            -13.68                13.17         0.60              12.57        2212.0           278.0
+    GLD 2016-11-03 2016-11-07          2016-11-08     3              4.68                -4.66         0.60              -5.26        3308.0          -174.0
+    GLD 2017-01-10 2017-01-18          2017-01-19     6             -1.66                 1.66         0.60               1.06        3402.0            36.0
+    GLD 2018-01-03 2018-01-11          2018-01-12     7              1.02                -1.04         0.60              -1.64        3775.0           -62.0
+    GLD 2021-07-19 2021-07-29          2021-07-30     9              3.01                -3.02         0.60              -3.62        6200.0          -224.0
+    GLD 2022-04-19 2022-04-25          2022-04-26     5             -4.22                 4.11         0.60               3.51        6495.0           228.0
+    GLD 2023-03-03 2023-03-13          2023-03-14     7             -5.62                 5.50         0.60               4.90        6726.0           329.0
+    GLD 2023-12-07 2023-12-14          2023-12-15     6              3.41                -3.39         0.60              -3.99        7808.0          -312.0
+    GLD 2024-03-12 2024-03-12          2024-03-13     1             -0.86                 0.86         0.60               0.26        8295.0            22.0
+  Spells: 20 (19 GLD, 1 cash); time in GLD 2.3%
+  GLD detours: mean net excess +0.45%, median +0.26%, share positive 52.6%
+  95% bootstrap CI of mean net excess: [-1.43%, +2.55%]
+  In-sample: 9 detours, mean -0.41%, median -0.38%, share positive 44.4%
+  Out-of-sample: 10 detours, mean +1.24%, median +0.66%, share positive 60.0%
+
+Exact bar-by-bar attribution (active log return = log(strategy_t/strategy_{t-1}) -
+log(baseline_t/baseline_{t-1}); grouped by the asset held on bar t-1, so a switch
+at bar t is charged to the spell being left and the exit swap bar belongs to it):
+holding  spells  bars  active_log_%  gross_log_%  cost_log_%  GBP effect to end
+   CASH       1    35        -1.232       -1.082       -0.15             -153.0
+    GLD      19   121        14.778       20.478       -5.70             1691.0
+    SPY      20  5097        -5.700        0.000       -5.70             -722.0
+  First-bar entry mismatch log(strategy0/baseline0): +0.001498876 (+18 GBP grown to end)
+  Sum of spell active log returns: +0.078462951
+  Sum + first-bar mismatch: +0.079961827
+  log(final strategy / final baseline): +0.079961827
+  Reconciled: yes (max abs error 5.2e-15)
+  GLD spells (exact, including the exit swap bar):
+     entry  last_held  exit_exec  bars  active_log_%  gross_log_%  cost_log_%  GBP effect to end
+2006-07-11 2006-07-13 2006-07-14     3          5.95         6.25        -0.3              711.0
+2008-05-23 2008-06-02 2008-06-03     6         -5.51        -5.21        -0.3             -698.0
+2010-01-14 2010-01-29 2010-02-01    11          1.60         1.90        -0.3              196.0
+2010-04-12 2010-04-26 2010-04-27    11          2.18         2.48        -0.3              266.0
+2010-08-20 2010-08-20 2010-08-23     1         -0.08         0.22        -0.3               -9.0
+2013-07-25 2013-08-05 2013-08-06     8         -4.49        -4.19        -0.3             -566.0
+2013-12-18 2013-12-20 2013-12-23     3         -3.05        -2.75        -0.3             -381.0
+2014-06-26 2014-07-02 2014-07-03     5         -1.36        -1.06        -0.3             -169.0
+2014-11-26 2014-12-10 2014-12-11    10          3.55         3.85        -0.3              429.0
+2015-03-16 2015-04-02 2015-04-06    14          4.79         5.09        -0.3              575.0
+2015-08-17 2015-08-21 2015-08-24     5         13.38        13.68        -0.3             1542.0
+2016-11-03 2016-11-07 2016-11-08     3         -4.98        -4.68        -0.3             -629.0
+2017-01-10 2017-01-18 2017-01-19     6          1.36         1.66        -0.3              167.0
+2018-01-03 2018-01-11 2018-01-12     7         -1.32        -1.02        -0.3             -163.0
+2021-07-19 2021-07-29 2021-07-30     9         -3.31        -3.01        -0.3             -415.0
+2022-04-19 2022-04-25 2022-04-26     5          3.92         4.22        -0.3              473.0
+2023-03-03 2023-03-13 2023-03-14     7          5.32         5.62        -0.3              637.0
+2023-12-07 2023-12-14 2023-12-15     6         -3.71        -3.41        -0.3             -466.0
+2024-03-12 2024-03-12 2024-03-13     1          0.56         0.86        -0.3               68.0
+  SPY spells: 20 spells, 5097 bars, active log return -5.700% (gross SPY-vs-SPY +0.000%, switch costs -5.700%), GBP effect to end -722
+  Leave-one-out (neutralise one GLD spell's exact active log return):
+    2015-08-17 -> 2015-08-24: active +13.38%, final 10,770 GBP, lead -595 GBP
+    2006-07-11 -> 2006-07-14: active +5.95%, final 11,601 GBP, lead +235 GBP
+    2008-05-23 -> 2008-06-03: active -5.51%, final 13,010 GBP, lead +1,644 GBP
+
+Annual return distribution (trailing one-year return on every traded bar with a full year behind it):
+               n  mean_pct  median_pct  sd_pct  skewness  excess_kurtosis  p5_pct  worst_pct  best_pct  share_negative_pct
+Strategy  5001.0     13.96       14.16   13.24     -0.42             0.80  -11.54     -34.52     60.76               11.26
+Baseline  5001.0     13.52       13.22   12.63     -0.17             0.27   -8.86     -30.60     58.68               11.94
+Active    5001.0      0.44        0.00    5.78      1.90             5.45   -5.92     -10.33     28.57               43.25
+  NOTE: Active skewness +1.90, excess kurtosis +5.45; the normal curve understates the left tail.
+  Windows overlap: about 5,000 daily observations are roughly 21 independent years. Do not read the smoothness as precision.
+
+Calendar-year returns (partial first/last years marked and excluded from the statistics):
+ year  strategy_pct  baseline_pct  active_pp  partial
+ 2005           0.0          -1.0        1.0     True
+ 2006           5.2           1.7        3.5    False
+ 2007           3.7           3.7        0.0    False
+ 2008         -19.2         -14.3       -4.8    False
+ 2009          14.4          14.4       -0.0    False
+ 2010          24.0          20.6        3.4    False
+ 2011           2.0           2.0        0.0    False
+ 2012          10.6          10.6        0.0    False
+ 2013          19.5          29.6      -10.1    False
+ 2014          22.1          20.2        1.9    False
+ 2015          26.8           6.4       20.4    False
+ 2016          28.1          35.1       -7.0    False
+ 2017          12.5          11.3        1.2    False
+ 2018          -0.6           1.0       -1.6    False
+ 2019          27.0          27.0        0.0    False
+ 2020          13.8          13.8        0.0    False
+ 2021          25.4          30.0       -4.6    False
+ 2022          -5.0          -8.4        3.4    False
+ 2023          20.7          19.5        1.2    False
+ 2024          27.1          26.7        0.3    False
+ 2025           9.7           9.7        0.0    False
+ 2026          13.5          13.5       -0.0     True
+  Full-year means (excluding partial years): strategy +13.4%, baseline +13.0%, active +0.4 pp
+
+Tracking error (strategy minus baseline daily returns):
+  Annualised active return +0.38%; annualised tracking error 3.84%; information ratio 0.10
+  Years needed to detect the observed edge at 2 standard errors: 406.9; years of data available: 20.8 -> NOT detectable
+
+Friction sensitivity (extra cost per swap leg; default FX fee unchanged):
+ extra_friction_pct_points  total_fx_fee_pct  strategy_final  baseline_final  lead_gbp  beats_baseline
+                      0.00              0.15         12312.0         11366.0     946.0            True
+                      0.05              0.20         11847.0         11360.0     487.0            True
+                      0.10              0.25         11400.0         11354.0      45.0            True
+                      0.20              0.35         10555.0         11343.0    -788.0           False
+                      0.30              0.45          9773.0         11332.0   -1559.0           False
+  Break-even extra friction: 0.11 percentage points per leg (total FX fee 0.26%)
+
+Clean holdout from 2026-11-14 (data before it informed the design):
+  no clean data yet (last traded bar 2026-11-13)
 
 Trades (execution date, ticker bought):
            bought
 date             
 2006-02-17    SPY
 2006-07-11    GLD
-2008-02-06    SPY
+2006-07-14    SPY
 2008-05-23    GLD
-2009-03-20    SPY
+2008-06-03    SPY
 2010-01-14    GLD
-2010-09-14    SPY
+2010-02-01    SPY
+2010-04-12    GLD
+2010-04-27    SPY
+2010-08-20    GLD
+2010-08-23    SPY
 2013-07-25    GLD
-2013-09-16    SPY
+2013-08-06    SPY
 2013-12-18    GLD
-2015-02-11    SPY
+2013-12-23    SPY
+2014-06-26    GLD
+2014-07-03    SPY
+2014-11-26    GLD
+2014-12-11    SPY
 2015-03-16    GLD
-2016-05-31    SPY
+2015-04-06    SPY
+2015-08-17    GLD
+2015-08-24    SPY
 2016-11-03    GLD
-2021-06-10    SPY
+2016-11-08    SPY
+2017-01-10    GLD
+2017-01-19    SPY
+2018-01-03    GLD
+2018-01-12    SPY
 2021-07-19    GLD
-2022-10-26    SPY
+2021-07-30    SPY
+2022-04-19    GLD
+2022-04-26    SPY
 2023-03-03    GLD
-2023-11-16    SPY
+2023-03-14    SPY
 2023-12-07    GLD
-2024-05-03    SPY
+2023-12-15    SPY
+2024-03-12    GLD
+2024-03-13    SPY
+
+Full-pipeline Monte Carlo null (300 synthetic histories, joint block bootstrap of 20 bars):
+  Real annualised excess +0.43%; null median -0.96%, 95th percentile +0.50%
+  Null trades median 47 [33-62] (5th-95th); null max drawdown median -34.1% (real: 39 trades, drawdown -38.6%)
+  Real result at percentile 93.7; one-sided p-value 0.0664 -> FAIL
 
 Sensitivity (judge the pattern, not the best row):
  window  quantile  age_fraction  max_age  trades  strategy_GBP  baseline_GBP  beats_baseline  IS_return_pct  IS_baseline_pct  IS_trades  IS_beats_baseline  OOS_return_pct  OOS_baseline_pct  OOS_trades  OOS_beats_baseline  noise_trades_median  beats_control_pct
-     20      90.0          0.50       10      65       10654.8       11365.8           False          184.8            117.2         33               True           274.2             424.1          32               False                 66.0               67.0
-     20      90.0          0.35        7      15       10324.1       11365.8           False          126.0            117.2          7               True           356.8             424.1           8               False                 23.0               64.0
-     20      90.0          0.65       13      93       12498.4       11365.8            True          193.1            117.2         41               True           326.4             424.1          52               False                 97.0               90.0
-     20      95.0          0.50       10      29       10082.7       11365.8           False          228.6            117.2         15               True           206.8             424.1          14               False                 35.0               69.0
-     20      95.0          0.35        7       4        5036.8       11365.8           False           35.3            117.2          2              False           272.2             424.1           2               False                 11.0               24.0
-     20      95.0          0.65       13      40        9073.4       11365.8           False          109.0            117.2         19              False           334.2             424.1          21               False                 53.0               68.0
-     20      99.0          0.50       10       6        4234.2       11365.8           False           12.7            117.2          3              False           275.7             424.1           3               False                  8.0               52.0
-     20      99.0          0.35        7       1        3560.6       11365.8           False            0.0            117.2          0              False           256.1             424.1           1               False                  2.0               61.0
-     20      99.0          0.65       13       8        6056.7       11365.8           False           61.2            117.2          5              False           275.7             424.1           3               False                 11.0               35.0
-     30      90.0          0.50       15      43        4401.2       11365.8           False          -14.0            117.2         16              False           411.8             424.1          27               False                 50.0               12.0
-     30      90.0          0.35       10       9        5118.6       11365.8           False           20.8            117.2          2              False           323.8             424.1           7               False                 17.0               17.0
-     30      90.0          0.65       20      69        4666.8       11365.8           False           25.8            117.2         32              False           271.1             424.1          37               False                 77.0               21.0
-     30      95.0          0.50       15      21       14326.2       11365.8            True          341.7            117.2         10               True           224.4             424.1          11               False                 24.0               80.0
-     30      95.0          0.35       10       5        4030.1       11365.8           False           15.0            117.2          2              False           250.3             424.1           3               False                  7.0               15.0
-     30      95.0          0.65       20      33        8999.3       11365.8           False          165.9            117.2         18               True           238.4             424.1          15               False                 37.0               64.0
-     30      99.0          0.50       15       5        4245.1       11365.8           False           26.2            117.2          1              False           236.3             424.1           4               False                  5.0               48.0
-     30      99.0          0.35       10       2        2280.2       11365.8           False            0.0            117.2          0              False           128.0             424.1           2               False                  1.0               78.0
-     30      99.0          0.65       20       6        9579.2       11365.8           False          184.8            117.2          2               True           236.3             424.1           4               False                  8.0               46.0
-     45      90.0          0.50       22      21       19073.3       11365.8            True          364.5            117.2         12               True           310.6             424.1           9               False                 26.0               93.0
-     45      90.0          0.35       16      10       11691.4       11365.8            True          157.4            117.2          6               True           354.2             424.1           4               False                 10.0               65.0
-     45      90.0          0.65       29      27       15951.8       11365.8            True          276.8            117.2         14               True           323.3             424.1          13               False                 42.0               86.0
-     45      95.0          0.50       22      10        4215.6       11365.8           False           24.7            117.2          4              False           238.2             424.1           6               False                 14.5                8.0
-     45      95.0          0.35       16       2        3189.0       11365.8           False          -13.4            117.2          2              False           268.2             424.1           0               False                  5.0                0.0
-     45      95.0          0.65       29      18        4809.8       11365.8           False           41.5            117.2         10              False           240.0             424.1           8               False                 22.0               11.0
-     45      99.0          0.50       22       2        3228.0       11365.8           False          -12.3            117.2          2              False           268.2             424.1           0               False                  3.0               10.0
-     45      99.0          0.35       16       1        2488.7       11365.8           False          -32.4            117.2          1              False           268.2             424.1           0               False                  1.0                1.0
-     45      99.0          0.65       29       5        3031.5       11365.8           False           -6.9            117.2          4              False           225.7             424.1           1               False                  5.0                5.0
+     20      90.0          0.50       10     126        6530.0       11365.8           False           58.2            117.2         54              False           312.8             424.1          72               False                107.5               29.0
+     20      90.0          0.35        7      60       10487.4       11365.8           False          119.6            117.2         24               True           377.6             424.1          36               False                 48.0               91.0
+     20      90.0          0.65       13     180        4741.6       11365.8           False           39.2            117.2         74              False           240.7             424.1         106               False                145.0               18.0
+     20      95.0          0.50       10      72        7349.9       11365.8           False           71.7            117.2         30              False           328.1             424.1          42               False                 63.0               16.0
+     20      95.0          0.35        7      25       10077.0       11365.8           False          109.6            117.2          7              False           380.8             424.1          18               False                 24.0               76.0
+     20      95.0          0.65       13     100        5750.6       11365.8           False           66.5            117.2         44              False           245.4             424.1          56               False                 86.0                9.0
+     20      99.0          0.50       10      19        6302.8       11365.8           False           32.2            117.2          3              False           376.8             424.1          16               False                 15.0               88.0
+     20      99.0          0.35        7       6        4886.0       11365.8           False            0.0            117.2          0              False           388.6             424.1           6               False                  4.0               69.0
+     20      99.0          0.65       13      27       10936.4       11365.8           False          138.1            117.2          5               True           359.3             424.1          22               False                 21.0               78.0
+     30      90.0          0.50       15      73        9759.3       11365.8           False          101.8            117.2         39              False           383.7             424.1          34               False                 81.0               64.0
+     30      90.0          0.35       10      31        9783.7       11365.8           False           95.1            117.2         17              False           401.6             424.1          14               False                 32.0               86.0
+     30      90.0          0.65       20     103        5566.4       11365.8           False           75.5            117.2         49              False           217.2             424.1          54               False                108.5               14.0
+     30      95.0          0.50       15      39       12312.0       11365.8            True          106.3            117.2         19              False           496.8             424.1          20                True                 43.0               89.0
+     30      95.0          0.35       10      19       10835.5       11365.8           False          112.6            117.2         11              False           409.7             424.1           8               False                 14.0               90.0
+     30      95.0          0.65       20      57        9540.0       11365.8           False           99.2            117.2         33              False           378.9             424.1          24               False                 60.0               54.0
+     30      99.0          0.50       15       9        6428.7       11365.8           False           26.2            117.2          1              False           409.3             424.1           8               False                  9.0               93.0
+     30      99.0          0.35       10       3        2009.8       11365.8           False            0.0            117.2          0              False           101.0             424.1           3               False                  2.0               54.0
+     30      99.0          0.65       20      10       10820.8       11365.8           False          122.1            117.2          2               True           387.2             424.1           8               False                 14.0               71.0
+     45      90.0          0.50       22      47       10153.8       11365.8           False           72.8            117.2         22              False           487.7             424.1          25                True                 42.0               52.0
+     45      90.0          0.35       16      25       11972.1       11365.8            True          118.0            117.2         13               True           449.2             424.1          12                True                 21.0               86.0
+     45      90.0          0.65       29      57       11435.0       11365.8            True          108.9            117.2         28              False           447.3             424.1          29                True                 62.0               78.0
+     45      95.0          0.50       22      29       10086.9       11365.8           False           78.7            117.2         16              False           464.5             424.1          13                True                 24.0               44.0
+     45      95.0          0.35       16      13       11567.4       11365.8            True          120.2            117.2          5               True           425.4             424.1           8                True                  9.5               78.0
+     45      95.0          0.65       29      39       11549.9       11365.8            True          118.3            117.2         22               True           429.0             424.1          17                True                 35.5               73.0
+     45      99.0          0.50       22       7       10386.7       11365.8           False          106.3            117.2          3              False           403.5             424.1           4               False                  6.0               88.0
+     45      99.0          0.35       16       2        8759.8       11365.8           False           67.1            117.2          2              False           424.1             424.1           0               False                  2.0               97.0
+     45      99.0          0.65       29      11       10133.6       11365.8           False          106.0            117.2          5              False           391.9             424.1           6               False                  9.0               87.0
 
 Pre-registered selection check (choose on IS only, then evaluate once on OOS):
-  Neighbour-robust IS pick: window 20, quantile 90, age fraction 0.65 (max age 13)
-    IS +193.1% vs baseline +117.2% (41 trades); 3x3 IS neighbourhood median +188.9%
-    OOS +326.4% vs baseline +424.1% (52 trades) -> did NOT beat the baseline
-  0 of 27 settings beat the baseline out of sample (baseline OOS +424.1%).
+  Neighbour-robust IS pick: window 45, quantile 90, age fraction 0.5 (max age 22)
+    IS +72.8% vs baseline +117.2% (22 trades); 3x3 IS neighbourhood median +113.5%
+    OOS +487.7% vs baseline +424.1% (25 trades) -> beat the baseline
+  7 of 27 settings beat the baseline out of sample (baseline OOS +424.1%).
+
+Validation verdict (pre-registered; ALL four checks must pass):
+  [1] FAIL  Full-pipeline Monte Carlo: real annualised excess +0.43% vs null 95th percentile +0.50% (p=0.0664)
+  [2] FAIL  Detour attribution: mean net detour excess +0.45% with 95% bootstrap CI [-1.43%, +2.55%]
+  [3] FAIL  Friction at 2x FX fee: final-value lead -380 GBP at total FX fee 0.30%
+  [4] FAIL  Neighbourhood (3x3): default cell beats baseline in 1/9 neighbours full-sample and 1/9 OOS (need 6/9 in both)
+  OVERALL: NOT VALIDATED
